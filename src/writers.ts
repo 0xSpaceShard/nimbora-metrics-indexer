@@ -1,53 +1,57 @@
+import { BigNumber } from '@ethersproject/bignumber';
 import { hexStrArrToStr, toAddress } from './utils';
 import type { CheckpointWriter } from '@snapshot-labs/checkpoint';
-
+import { uint256 } from 'starknet';
 export async function handleDeploy() {
   // Run logic as at the time Contract was deployed.
 }
 
-// This decodes the new_post events data and stores successfully
-// decoded information in the `posts` table.
-//
-// See here for the original logic used to create post transactions:
-// https://gist.github.com/perfectmak/417a4dab69243c517654195edf100ef9#file-index-ts
-export async function handleNewPost({ block, tx, event, mysql }: Parameters<CheckpointWriter>[0]) {
-  if (!block || !event) return;
+export async function handleBatchRequest({ block, tx, event, mysql }: Parameters<CheckpointWriter>[0]) {
+  if (!event) return;
+  if (!block) return;
 
-  const author = toAddress(event.data[0]);
-  let content = '';
-  let tag = '';
-  const contentLength = BigInt(event.data[1]);
-  const tagLength = BigInt(event.data[2 + Number(contentLength)]);
   const timestamp = block.timestamp;
   const blockNumber = block.block_number;
-
-  // parse content bytes
-  try {
-    content = hexStrArrToStr(event.data, 2, contentLength);
-  } catch (e) {
-    console.error(`failed to decode content on block [${blockNumber}]: ${e}`);
-    return;
-  }
-
-  // parse tag bytes
-  try {
-    tag = hexStrArrToStr(event.data, 3 + Number(contentLength), tagLength);
-  } catch (e) {
-    console.error(`failed to decode tag on block [${blockNumber}]: ${e}`);
-    return;
-  }
-
+  const nonce = event.data[0];
+  const total_borrowed = uint256.uint256ToBN({low: event.data[2], high: event.data[1]});
+  const total_repaid = uint256.uint256ToBN({low: event.data[4], high: event.data[3]});
+  
   // post object matches fields of Post type in schema.gql
-  const post = {
-    id: `${author}/${tx.transaction_hash}`,
-    author,
-    content,
-    tag,
+  const batch_request = {
+    id: nonce,
+    total_borrowed: total_borrowed.toString(),
+    total_repaid: total_repaid.toString(),
     tx_hash: tx.transaction_hash,
     created_at: timestamp,
     created_at_block: blockNumber
   };
 
+  console.log(">>> Indexing BatchRequest");
+
   // table names are `lowercase(TypeName)s` and can be interacted with sql
-  await mysql.queryAsync('INSERT IGNORE INTO posts SET ?', [post]);
+  await mysql.queryAsync('INSERT IGNORE INTO batchrequests SET ?', [batch_request]);
+}
+
+export async function handleBatchResponse({ block, tx, event, mysql }: Parameters<CheckpointWriter>[0]) {
+  if (!event) return;
+  if (!block) {console.log("IS EMPTY"); return;}
+
+  const timestmap = block.timestamp;
+  const blockNumber = block.block_number;
+  const nonce = event.data[0];
+  const total_lusd = uint256.uint256ToBN({low: event.data[2], high: event.data[1]});
+  const total_eth = uint256.uint256ToBN({low: event.data[4], high: event.data[3]});
+
+  const batch_response = {
+    id: nonce,
+    lusd_amount: total_lusd.toString(),
+    eth_amount: total_eth.toString(),
+    tx_hash: tx.transaction_hash,
+    created_at: timestmap,
+    created_at_block: blockNumber
+  };
+
+  console.log(">>> Indexing BatchResponse");
+
+  await mysql.queryAsync('INSERT IGNORE INTO batchresponses SET ?', [batch_response]);
 }

@@ -4,6 +4,7 @@ dist
 build
 .env
 coverage
+yarn.lock
 
 # Remove some common IDE working directories
 .idea

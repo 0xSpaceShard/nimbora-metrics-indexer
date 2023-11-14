@@ -1,10 +1,18 @@
 scalar Text
 
-type Post {
+type BatchRequest {
   id: String!
-  author: String!
-  content: Text!
-  tag: String
+  total_borrowed: Int!
+  total_repaid: Int!
+  tx_hash: String!
+  created_at: Int!
+  created_at_block: Int!
+}
+
+type BatchResponse {
+  id: String!
+  lusd_amount: Int!
+  eth_amount: Int!
   tx_hash: String!
   created_at: Int!
   created_at_block: Int!
